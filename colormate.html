@@ -893,6 +893,22 @@ function switchTab(name,btn){
 const FREE_MINUTES = 10;
 const FREE_PHOTOS = 1;
 const STORAGE_KEY = 'cm_free_v1';
+const OWNER_IDS = ['7901826943'];
+
+function getTelegramUserId(){
+  try {
+    if(window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe){
+      const u = Telegram.WebApp.initDataUnsafe.user;
+      if(u && u.id) return String(u.id);
+    }
+  } catch(e){}
+  return null;
+}
+
+function isOwner(){
+  const uid = getTelegramUserId();
+  return uid && OWNER_IDS.includes(uid);
+}
 
 function todayKey(){ return new Date().toISOString().slice(0,10); }
 
@@ -901,7 +917,9 @@ function loadUsage(){
     const raw = localStorage.getItem(STORAGE_KEY);
     if(!raw) return null;
     const d = JSON.parse(raw);
-    if(d.date !== todayKey()) return null; // new day — reset
+    // не сбрасываем если isPro — про остаётся навсегда
+    if(d.isPro) return d;
+    if(d.date !== todayKey()) return null;
     return d;
   } catch(e){ return null; }
 }
@@ -909,6 +927,8 @@ function loadUsage(){
 function saveUsage(u){ localStorage.setItem(STORAGE_KEY, JSON.stringify({...u, date:todayKey()})); }
 
 function getUsage(){
+  // владелец всегда Pro
+  if(isOwner()) return { date:todayKey(), secsUsed:0, photosUsed:0, isPro:true };
   const u = loadUsage();
   if(u) return u;
   const fresh = { date:todayKey(), secsUsed:0, photosUsed:0, isPro:false };
