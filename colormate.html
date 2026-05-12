@@ -298,6 +298,7 @@
   .share-btn { display:flex; align-items:center; justify-content:center; gap:7px; margin:10px 16px 0; width:calc(100% - 32px); padding:13px; background:linear-gradient(135deg,#7B5EA7,#4da3ff); color:#fff; border:none; border-radius:var(--radius); font-family:'DM Mono',monospace; font-size:12px; font-weight:500; cursor:pointer; transition:opacity 0.15s; }
   .share-btn:active { opacity:0.85; }
   .share-btn svg { width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .share-app-btn { background:transparent; border:0.5px solid var(--border2); color:var(--muted); margin-top:8px; }
 
   /* ── Upload zone (Photo tab) ── */
   .upload-zone {
@@ -490,6 +491,10 @@
   <button class="share-btn" onclick="sharePalette()">
     <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
     Share palette
+  </button>
+  <button class="share-btn share-app-btn" onclick="shareApp()">
+    <svg viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+    Share app
   </button>
 </div>
 
@@ -704,7 +709,21 @@ function roundRect(ctx,x,y,w,h,r,tl,tr){
   ctx.closePath();
 }
 
-async function sharePalette(){
+async function shareApp(){
+  const text = 'I just found this awesome color tool 😍\nInstant palettes from any color or photo 🎨';
+  const url = 'https://t.me/colormateapp_bot';
+  try {
+    if(navigator.share){
+      await navigator.share({ title:'ColorMate 🎨', text, url });
+      return;
+    }
+  } catch(e){}
+  // fallback — copy link
+  navigator.clipboard.writeText(`${text}\n${url}`).catch(()=>{});
+  const btn = document.querySelector('.share-app-btn');
+  btn.textContent = '✓ Link copied!';
+  setTimeout(()=>{ btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> Share app'; }, 1600);
+}
   const palette=getPalette(baseHex,ctx,variant);
   const colors=[baseHex,...palette.map(c=>c.hex)];
   const dataUrl=generatePaletteImage(colors);
