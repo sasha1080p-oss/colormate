@@ -344,6 +344,23 @@
   .tg-btn:active { opacity: 0.8; }
   .tg-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 
+  /* ── Eyedropper ── */
+  .eyedrop-btn { display:flex; align-items:center; justify-content:center; gap:6px; margin:0 16px 10px; width:calc(100% - 32px); padding:10px; background:transparent; color:var(--accent); border:0.5px solid var(--accent); border-radius:var(--radius-sm); font-family:'DM Mono',monospace; font-size:12px; cursor:pointer; transition:background 0.15s; }
+  .eyedrop-btn:active { background:rgba(77,163,255,0.1); }
+  .eyedrop-btn svg { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .eyedrop-btn.picking { background:rgba(77,163,255,0.15); border-width:1px; }
+  .picker-wrap { position:relative; margin:0 16px 14px; border-radius:var(--radius); overflow:hidden; border:1.5px solid var(--accent); display:none; }
+  .picker-wrap.visible { display:block; }
+  .picker-canvas { display:block; width:100%; cursor:crosshair; touch-action:none; -webkit-user-select:none; user-select:none; }
+  .picker-hint { position:absolute; bottom:8px; left:0; right:0; text-align:center; font-size:10px; color:rgba(255,255,255,0.75); pointer-events:none; text-shadow:0 1px 4px rgba(0,0,0,0.9); }
+  .loupe { position:absolute; width:60px; height:60px; border-radius:50%; border:2.5px solid #fff; pointer-events:none; display:none; box-shadow:0 2px 14px rgba(0,0,0,0.6); transform:translate(-50%,-120%) translateY(-10px); z-index:10; background:#000; }
+  .picked-preview { display:flex; align-items:center; gap:10px; margin:0 16px 14px; padding:10px 14px; background:var(--bg2); border-radius:var(--radius-sm); border:0.5px solid var(--border2); }
+  .picked-dot { width:34px; height:34px; border-radius:6px; flex-shrink:0; }
+  .picked-info { flex:1; }
+  .picked-name { font-family:'Syne',sans-serif; font-size:13px; font-weight:600; color:var(--text); }
+  .picked-hex { font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; }
+  .use-btn { padding:6px 14px; font-family:'DM Mono',monospace; font-size:11px; border-radius:var(--radius-sm); border:none; background:var(--accent); color:#fff; cursor:pointer; white-space:nowrap; }
+
   /* ── Change photo btn ── */
   .change-btn {
     display: flex;
@@ -427,6 +444,26 @@
 
   <div class="loading-bar" id="loadingBar">
     <div class="loading-fill" id="loadingFill"></div>
+  </div>
+
+  <button class="eyedrop-btn" id="eyedropBtn" onclick="togglePicker()" style="display:none">
+    <svg viewBox="0 0 24 24"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8"/></svg>
+    Pick color with eyedropper
+  </button>
+
+  <div class="picker-wrap" id="pickerWrap">
+    <canvas class="picker-canvas" id="pickerCanvas"></canvas>
+    <div class="picker-hint">Tap anywhere on the photo to pick a color</div>
+    <div class="loupe" id="loupe"></div>
+  </div>
+
+  <div class="picked-preview" id="pickedPreview" style="display:none">
+    <div class="picked-dot" id="pickedDot"></div>
+    <div class="picked-info">
+      <div class="picked-name" id="pickedName"></div>
+      <div class="picked-hex" id="pickedHex"></div>
+    </div>
+    <button class="use-btn" onclick="usePicked()">Use color</button>
   </div>
 
   <div id="photoResult">
@@ -557,6 +594,111 @@ function copyAllPalette(){
   setTimeout(()=>btn.textContent='Copy all HEX',1500);
 }
 
+/* ─── EYEDROPPER ─── */
+let pickerImg=null;
+let pickedHexVal=null;
+let pickerActive=false;
+
+function togglePicker(){
+  pickerActive=!pickerActive;
+  const wrap=document.getElementById('pickerWrap');
+  const btn=document.getElementById('eyedropBtn');
+  if(pickerActive){
+    wrap.classList.add('visible');
+    btn.classList.add('picking');
+    btn.innerHTML=`<svg viewBox="0 0 24 24"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8"/></svg> Close eyedropper`;
+    drawPickerCanvas();
+  } else {
+    wrap.classList.remove('visible');
+    btn.classList.remove('picking');
+    btn.innerHTML=`<svg viewBox="0 0 24 24"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8"/></svg> Pick color with eyedropper`;
+    document.getElementById('loupe').style.display='none';
+  }
+}
+
+function drawPickerCanvas(){
+  if(!pickerImg)return;
+  const canvas=document.getElementById('pickerCanvas');
+  const wrap=document.getElementById('pickerWrap');
+  const w=wrap.clientWidth||300;
+  const ratio=pickerImg.naturalHeight/pickerImg.naturalWidth;
+  canvas.width=w*2;
+  canvas.height=w*ratio*2;
+  canvas.style.height=(w*ratio)+'px';
+  const ctx2=canvas.getContext('2d');
+  ctx2.drawImage(pickerImg,0,0,canvas.width,canvas.height);
+}
+
+function getPickerColor(canvas,x,y){
+  const ctx2=canvas.getContext('2d');
+  const px=Math.round(x*canvas.width/canvas.offsetWidth);
+  const py=Math.round(y*canvas.height/canvas.offsetHeight);
+  const d=ctx2.getImageData(Math.max(0,px-1),Math.max(0,py-1),3,3).data;
+  let r=0,g=0,b=0,n=0;
+  for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2];n++;}
+  r=Math.round(r/n);g=Math.round(g/n);b=Math.round(b/n);
+  return'#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+
+function showLoupe(canvas,x,y,hex){
+  const loupe=document.getElementById('loupe');
+  loupe.style.display='block';
+  loupe.style.left=x+'px';
+  loupe.style.top=y+'px';
+  loupe.style.background=hex;
+  loupe.style.borderColor=lum(hex)>140?'rgba(0,0,0,0.4)':'#fff';
+}
+
+function onPickerEvent(e){
+  e.preventDefault();
+  const canvas=document.getElementById('pickerCanvas');
+  const rect=canvas.getBoundingClientRect();
+  const touch=e.touches?e.touches[0]:e;
+  const x=touch.clientX-rect.left;
+  const y=touch.clientY-rect.top;
+  const hex=getPickerColor(canvas,x,y);
+  showLoupe(canvas,x,y,hex);
+  if(e.type==='click'||(e.type==='touchend')){
+    pickedHexVal=hex;
+    document.getElementById('pickedDot').style.background=hex;
+    document.getElementById('pickedName').textContent=colorName(hex);
+    document.getElementById('pickedHex').textContent=hex.toUpperCase();
+    document.getElementById('pickedPreview').style.display='flex';
+    document.getElementById('loupe').style.display='none';
+  }
+}
+
+function usePicked(){
+  if(!pickedHexVal)return;
+  baseHex=pickedHexVal;
+  variant=0;
+  const exists=swatches.some(s=>s.hex.toLowerCase()===pickedHexVal.toLowerCase());
+  if(!exists) swatches[0]={hex:pickedHexVal,name:colorName(pickedHexVal)};
+  buildSwatches();
+  renderPalette();
+  document.getElementById('hexInput').value=pickedHexVal.toUpperCase();
+  togglePicker();
+  document.getElementById('pickedPreview').style.display='none';
+  const tabs=document.querySelectorAll('.tab');
+  switchTab('palette',tabs[0]);
+  tabs[0].classList.add('active');
+}
+
+function setupPickerEvents(){
+  const canvas=document.getElementById('pickerCanvas');
+  canvas.addEventListener('click',onPickerEvent);
+  canvas.addEventListener('touchend',onPickerEvent,{passive:false});
+  canvas.addEventListener('touchmove',(e)=>{
+    e.preventDefault();
+    const rect=canvas.getBoundingClientRect();
+    const touch=e.touches[0];
+    const x=touch.clientX-rect.left;
+    const y=touch.clientY-rect.top;
+    const hex=getPickerColor(canvas,x,y);
+    showLoupe(canvas,x,y,hex);
+  },{passive:false});
+}
+
 /* ─── PHOTO EXTRACTION ─── */
 function extractColors(img,count=5){
   const canvas=document.createElement('canvas');
@@ -595,12 +737,20 @@ function handleFile(e){
   let w=0;const tick=setInterval(()=>{w=Math.min(w+4,90);lf.style.width=w+'%';},40);
 
   document.getElementById('photoResult').innerHTML='';
+  document.getElementById('pickedPreview').style.display='none';
+  document.getElementById('pickerWrap').classList.remove('visible');
+  pickerActive=false;
 
   const img=new Image();
   img.onload=()=>{
-    const colors=extractColors(img);
+    pickerImg=img;
     clearInterval(tick);lf.style.width='100%';
-    setTimeout(()=>{lb.style.display='none';renderPhotoResult(colors);},350);
+    setTimeout(()=>{
+      lb.style.display='none';
+      renderPhotoResult(extractColors(img));
+      document.getElementById('eyedropBtn').style.display='flex';
+      setupPickerEvents();
+    },350);
   };
   img.src=url;
 }
@@ -644,6 +794,11 @@ function changePhoto(){
     <svg viewBox="0 0 24 24"><path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>
     <div class="idle-txt">Upload any photo to extract<br>its dominant color palette</div>
   </div>`;
+  document.getElementById('eyedropBtn').style.display='none';
+  document.getElementById('pickerWrap').classList.remove('visible');
+  document.getElementById('pickedPreview').style.display='none';
+  pickerActive=false;
+  pickerImg=null;
 }
 
 function copyAllPhoto(hexes,btn){
