@@ -311,7 +311,7 @@
   .upload-zone svg { width: 32px; height: 32px; stroke: var(--muted2); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 10px; }
   .upload-main { font-size: 13px; color: #aaa; line-height: 1.5; }
   .upload-hint { font-size: 10px; color: var(--muted2); margin-top: 6px; }
-  .preview-img { width: 100%; height: 150px; object-fit: cover; display: block; }
+  .preview-img { width: 100%; height: auto; max-height: 220px; object-fit: cover; display: block; }
 
   /* ── Loading bar ── */
   .loading-bar { height: 3px; background: var(--bg2); margin: 0 16px 16px; border-radius: 99px; overflow: hidden; display: none; }
@@ -625,8 +625,7 @@ function drawPickerCanvas(){
   canvas.width=w*2;
   canvas.height=w*ratio*2;
   canvas.style.height=(w*ratio)+'px';
-  const ctx2=canvas.getContext('2d');
-  ctx2.drawImage(pickerImg,0,0,canvas.width,canvas.height);
+  canvas.getContext('2d').drawImage(pickerImg,0,0,canvas.width,canvas.height);
 }
 
 function getPickerColor(canvas,x,y){
@@ -653,19 +652,23 @@ function onPickerEvent(e){
   e.preventDefault();
   const canvas=document.getElementById('pickerCanvas');
   const rect=canvas.getBoundingClientRect();
-  const touch=e.touches?e.touches[0]:e;
-  const x=touch.clientX-rect.left;
-  const y=touch.clientY-rect.top;
+  const touch=e.changedTouches?e.changedTouches[0]:(e.touches?e.touches[0]:e);
+  const x=Math.max(0,Math.min(touch.clientX-rect.left,rect.width));
+  const y=Math.max(0,Math.min(touch.clientY-rect.top,rect.height));
   const hex=getPickerColor(canvas,x,y);
-  showLoupe(canvas,x,y,hex);
-  if(e.type==='click'||(e.type==='touchend')){
-    pickedHexVal=hex;
-    document.getElementById('pickedDot').style.background=hex;
-    document.getElementById('pickedName').textContent=colorName(hex);
-    document.getElementById('pickedHex').textContent=hex.toUpperCase();
-    document.getElementById('pickedPreview').style.display='flex';
-    document.getElementById('loupe').style.display='none';
+
+  if(e.type==='touchmove'){
+    showLoupe(canvas,x,y,hex);
+    return;
   }
+
+  // click or touchend — commit the color
+  pickedHexVal=hex;
+  document.getElementById('pickedDot').style.background=hex;
+  document.getElementById('pickedName').textContent=colorName(hex);
+  document.getElementById('pickedHex').textContent=hex.toUpperCase();
+  document.getElementById('pickedPreview').style.display='flex';
+  document.getElementById('loupe').style.display='none';
 }
 
 function usePicked(){
@@ -686,17 +689,18 @@ function usePicked(){
 
 function setupPickerEvents(){
   const canvas=document.getElementById('pickerCanvas');
-  canvas.addEventListener('click',onPickerEvent);
-  canvas.addEventListener('touchend',onPickerEvent,{passive:false});
-  canvas.addEventListener('touchmove',(e)=>{
-    e.preventDefault();
-    const rect=canvas.getBoundingClientRect();
-    const touch=e.touches[0];
-    const x=touch.clientX-rect.left;
-    const y=touch.clientY-rect.top;
-    const hex=getPickerColor(canvas,x,y);
-    showLoupe(canvas,x,y,hex);
-  },{passive:false});
+  const fresh=canvas.cloneNode(true);
+  canvas.parentNode.replaceChild(fresh,canvas);
+  fresh.addEventListener('click',onPickerEvent);
+  fresh.addEventListener('touchend',onPickerEvent,{passive:false});
+  fresh.addEventListener('touchmove',onPickerEvent,{passive:false});
+  // redraw image on the fresh canvas
+  if(!pickerImg)return;
+  const w=fresh.offsetWidth||fresh.parentElement.clientWidth||300;
+  const ratio=pickerImg.naturalHeight/pickerImg.naturalWidth;
+  fresh.width=w*2;fresh.height=w*ratio*2;
+  fresh.style.height=(w*ratio)+'px';
+  fresh.getContext('2d').drawImage(pickerImg,0,0,fresh.width,fresh.height);
 }
 
 /* ─── PHOTO EXTRACTION ─── */
