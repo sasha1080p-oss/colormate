@@ -1000,80 +1000,62 @@ function switchTab(name,btn){
 
 /* ─── FREEMIUM SYSTEM ─── */
 const FREE_MINUTES = 10;
-const FREE_PHOTOS = 1;
-const STORAGE_KEY = 'cm_free_v1';
+const STORAGE_KEY = 'cm_free_v2';
 const OWNER_IDS = ['7901826943'];
 
+function todayKey(){ return new Date().toISOString().slice(0,10); }
+
 function getTelegramUserId(){
-  try {
-    if(window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe){
-      const u = Telegram.WebApp.initDataUnsafe.user;
-      if(u && u.id) return String(u.id);
+  try{
+    if(window.Telegram&&Telegram.WebApp&&Telegram.WebApp.initDataUnsafe){
+      const u=Telegram.WebApp.initDataUnsafe.user;
+      if(u&&u.id) return String(u.id);
     }
-  } catch(e){}
+  }catch(e){}
   return null;
 }
 
 function isOwner(){
-  // проверяем Telegram ID
-  const uid = getTelegramUserId();
-  if(uid && OWNER_IDS.includes(uid)) return true;
-  // запасной вариант — если уже помечен как owner в storage
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY);
-    if(raw){ const d = JSON.parse(raw); if(d.isOwner) return true; }
-  } catch(e){}
+  const uid=getTelegramUserId();
+  if(uid&&OWNER_IDS.includes(uid)) return true;
+  try{
+    const raw=localStorage.getItem(STORAGE_KEY)||sessionStorage.getItem(STORAGE_KEY);
+    if(raw){const d=JSON.parse(raw);if(d.isOwner) return true;}
+  }catch(e){}
   return false;
+}
+
+function loadRaw(){
+  try{
+    const r=localStorage.getItem(STORAGE_KEY)||sessionStorage.getItem(STORAGE_KEY);
+    return r?JSON.parse(r):null;
+  }catch(e){return null;}
+}
+
+function saveUsage(u){
+  const s=JSON.stringify(u);
+  try{localStorage.setItem(STORAGE_KEY,s);}catch(e){}
+  try{sessionStorage.setItem(STORAGE_KEY,s);}catch(e){}
 }
 
 function getUsage(){
   if(isOwner()){
-    // сохраняем флаг owner чтобы работало и без Telegram SDK
-    const data = { date:todayKey(), secsUsed:0, photosUsed:0, isPro:true, isOwner:true };
-    saveUsage(data);
-    return data;
+    const d={date:todayKey(),secsUsed:0,isPro:true,isOwner:true};
+    saveUsage(d);return d;
   }
-  const u = loadUsage();
-  if(u) return u;
-  const fresh = { date:todayKey(), secsUsed:0, photosUsed:0, isPro:false };
-  saveUsage(fresh);
-  return fresh;
+  const raw=loadRaw();
+  if(raw&&raw.isPro) return raw; // про навсегда
+  if(raw&&raw.date===todayKey()) return raw; // сегодняшние данные
+  const fresh={date:todayKey(),secsUsed:0,isPro:false};
+  saveUsage(fresh);return fresh;
 }
 
-function todayKey(){ return new Date().toISOString().slice(0,10); }
+let usage=getUsage();
+let timerInterval=null;
 
-function loadUsage(){
-  try {
-    // пробуем localStorage
-    let raw = localStorage.getItem(STORAGE_KEY);
-    // fallback на sessionStorage если localStorage пустой
-    if(!raw) raw = sessionStorage.getItem(STORAGE_KEY);
-    if(!raw) return null;
-    const d = JSON.parse(raw);
-    if(d.isPro) return d;
-    if(d.date !== todayKey()) return null;
-    return d;
-  } catch(e){ return null; }
-}
-
-function saveUsage(u){
-  const data = JSON.stringify({...u, date:todayKey()});
-  try { localStorage.setItem(STORAGE_KEY, data); } catch(e){}
-  try { sessionStorage.setItem(STORAGE_KEY, data); } catch(e){}
-}
-
-let usage = getUsage();
-let sessionStart = Date.now();
-let timerInterval = null;
-
-function secsLeft(){ return Math.max(0, FREE_MINUTES*60 - usage.secsUsed); }
-function photosLeft(){ return Math.max(0, FREE_PHOTOS - usage.photosUsed); }
-function isPro(){ return usage.isPro; }
-
-function formatTime(s){
-  const m = Math.floor(s/60), sec = s%60;
-  return `${m}:${String(sec).padStart(2,'0')}`;
-}
+function secsLeft(){return Math.max(0,FREE_MINUTES*60-usage.secsUsed);}
+function isPro(){return usage.isPro;}
+function formatTime(s){return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;}
 
 function updateBar(){
   if(isPro()){
@@ -1083,58 +1065,46 @@ function updateBar(){
     document.getElementById('statusChip').style.color='var(--accent)';
     return;
   }
-  const sl = secsLeft();
-  const totalPips = 10;
-  const usedPips = Math.round((usage.secsUsed / (FREE_MINUTES*60)) * totalPips);
-  const pipsHTML = Array.from({length:totalPips},(_,i)=>{
+  const sl=secsLeft();
+  const totalPips=10;
+  const usedPips=Math.min(totalPips,Math.round((usage.secsUsed/(FREE_MINUTES*60))*totalPips));
+  document.getElementById('timePips').innerHTML=Array.from({length:totalPips},(_,i)=>{
     let cls='pip';
-    if(i < usedPips) cls += usedPips >= totalPips ? ' over' : usedPips >= 7 ? ' warn' : ' on';
-    return `<div class="${cls}"></div>`;
+    if(i<usedPips) cls+=usedPips>=totalPips?' over':usedPips>=7?' warn':' on';
+    return`<div class="${cls}"></div>`;
   }).join('');
-  document.getElementById('timePips').innerHTML = pipsHTML;
-  document.getElementById('freeBarTitle').innerHTML = sl > 0
-    ? `Free plan · <span id="timeLeft">${formatTime(sl)}</span> left today`
-    : `⏱ Time's up — upgrade to continue`;
-  document.getElementById('freeBarSub').textContent = sl > 0
-    ? 'Palette & photo · 10 min/day free'
-    : 'Unlock forever for $1';
-  document.getElementById('freeBarSub').style.cursor = sl === 0 ? 'pointer' : '';
-  document.getElementById('statusChip').textContent = sl > 0 ? `Free · ${formatTime(sl)}` : `⏱ 0:00`;
+  document.getElementById('freeBarTitle').innerHTML=sl>0
+    ?`Free · <span id="timeLeft">${formatTime(sl)}</span> left today`
+    :`⏱ Time's up`;
+  document.getElementById('freeBarSub').textContent=sl>0
+    ?'Palette & photo — 10 min/day free'
+    :'Unlock forever for $1';
+  document.getElementById('statusChip').textContent=sl>0?`Free · ${formatTime(sl)}`:'⏱ 0:00';
 }
 
 function startTimer(){
   if(timerInterval) clearInterval(timerInterval);
-  timerInterval = setInterval(()=>{
-    if(isPro()) return;
-    usage.secsUsed = Math.min(FREE_MINUTES*60, usage.secsUsed + 1);
+  timerInterval=setInterval(()=>{
+    if(isPro()){clearInterval(timerInterval);return;}
+    usage.secsUsed=Math.min(FREE_MINUTES*60,usage.secsUsed+1);
     saveUsage(usage);
     updateBar();
-    if(secsLeft() === 0){
-      clearInterval(timerInterval);
-      showPaywall('timer');
-    }
-  }, 1000);
+    if(secsLeft()===0){clearInterval(timerInterval);showPaywall('timer');}
+  },1000);
 }
 
-function canUseApp(){
-  if(isPro()) return true;
-  return secsLeft() > 0;
-}
-
-// фото теперь тоже только по таймеру — отдельного лимита нет
-function canUsePhoto(){
-  return canUseApp();
-}
+function canUseApp(){ return isPro()||secsLeft()>0; }
+function canUsePhoto(){ return canUseApp(); }
 
 function showPaywall(reason){
-  const sub = document.getElementById('paywallSub');
-  const dismiss = document.getElementById('paywallDismiss');
-  if(reason === 'timer'){
-    sub.textContent = "Your 10 free minutes are up. Unlock forever for just $1.";
-    dismiss.style.display = 'none';
+  const sub=document.getElementById('paywallSub');
+  const dismiss=document.getElementById('paywallDismiss');
+  if(reason==='timer'){
+    sub.textContent="Your 10 free minutes are up. Unlock forever for just $1.";
+    dismiss.style.display='none';
   } else {
-    sub.textContent = "Unlock unlimited use forever for just $1.";
-    dismiss.style.display = '';
+    sub.textContent="Unlock unlimited use forever for just $1.";
+    dismiss.style.display='';
   }
   document.getElementById('paywall').classList.add('show');
 }
@@ -1144,26 +1114,26 @@ function dismissPaywall(){
 }
 
 function handleUpgrade(){
-  if(window.Telegram && Telegram.WebApp){
-    Telegram.WebApp.openLink('https://ko-fi.com/s/9e4ccc869d');
-  } else {
-    window.open('https://ko-fi.com/s/9e4ccc869d','_blank');
-  }
+  const url='https://ko-fi.com/s/9e4ccc869d';
+  try{
+    if(window.Telegram&&Telegram.WebApp&&Telegram.WebApp.openLink){
+      Telegram.WebApp.openLink(url);return;
+    }
+  }catch(e){}
+  window.open(url,'_blank');
 }
 
-// DEV helper — call unlockPro() in console to test pro mode
-function unlockPro(){ usage.isPro=true; saveUsage(usage); updateBar(); dismissPaywall(); alert('Pro unlocked!'); }
-function resetFree(){ localStorage.removeItem(STORAGE_KEY); location.reload(); }
+function unlockPro(){usage.isPro=true;saveUsage(usage);updateBar();dismissPaywall();}
+function resetFree(){localStorage.removeItem(STORAGE_KEY);sessionStorage.removeItem(STORAGE_KEY);location.reload();}
 
 document.getElementById('hexInput').addEventListener('keydown',e=>{if(e.key==='Enter')applyHex();});
 
-/* ─── TELEGRAM SDK ─── */
 if(window.Telegram&&Telegram.WebApp){
   Telegram.WebApp.ready();
   Telegram.WebApp.expand();
 }
 
-usage = getUsage();
+usage=getUsage();
 updateBar();
 if(!isPro()) startTimer();
 buildSwatches();
