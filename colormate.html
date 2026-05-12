@@ -407,8 +407,9 @@
   .paywall-feats { display:flex; flex-direction:column; gap:8px; margin-bottom:20px; text-align:left; }
   .paywall-feat { display:flex; align-items:center; gap:10px; font-size:12px; color:var(--text); }
   .paywall-feat-icon { width:22px; height:22px; border-radius:50%; background:rgba(77,163,255,0.12); color:var(--accent); font-size:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-  .paywall-btn { width:100%; padding:14px; background:var(--accent); color:#fff; border:none; border-radius:var(--radius); font-family:'DM Mono',monospace; font-size:13px; font-weight:500; cursor:pointer; margin-bottom:10px; transition:opacity 0.15s; }
+  .paywall-btn { width:100%; padding:14px; background:var(--accent); color:#fff; border:none; border-radius:var(--radius); font-family:'DM Mono',monospace; font-size:13px; font-weight:500; cursor:pointer; margin-bottom:8px; transition:opacity 0.15s; }
   .paywall-btn:active { opacity:0.85; }
+  .paywall-link { display:block; text-align:center; font-size:11px; color:var(--accent); font-family:'DM Mono',monospace; margin-bottom:8px; text-decoration:underline; }
   .paywall-dismiss { width:100%; padding:9px; background:transparent; color:var(--muted); border:none; font-family:'DM Mono',monospace; font-size:11px; cursor:pointer; }
 </style>
 </head>
@@ -427,6 +428,7 @@
       <div class="paywall-feat"><div class="paywall-feat-icon">⚡</div> No daily time limits</div>
     </div>
     <button class="paywall-btn" onclick="handleUpgrade()">Unlock forever — $1</button>
+    <a class="paywall-link" href="https://ko-fi.com/s/9e4ccc869d" target="_blank">or tap here to pay</a>
     <button class="paywall-dismiss" id="paywallDismiss" onclick="dismissPaywall()">Maybe later</button>
   </div>
 </div>
@@ -1002,6 +1004,7 @@ function switchTab(name,btn){
 const FREE_MINUTES = 10;
 const STORAGE_KEY = 'cm_free_v2';
 const OWNER_IDS = ['7901826943'];
+const OWNER_SECRET = 'sasha_pro_7901826943'; // секретный ключ только для тебя
 
 function todayKey(){ return new Date().toISOString().slice(0,10); }
 
@@ -1016,8 +1019,15 @@ function getTelegramUserId(){
 }
 
 function isOwner(){
+  // 1. по Telegram ID
   const uid=getTelegramUserId();
   if(uid&&OWNER_IDS.includes(uid)) return true;
+  // 2. по секретному ключу в URL: ?owner=sasha_pro_7901826943
+  try{
+    const params=new URLSearchParams(window.location.search);
+    if(params.get('owner')===OWNER_SECRET) return true;
+  }catch(e){}
+  // 3. из storage (сохранённый ранее)
   try{
     const raw=localStorage.getItem(STORAGE_KEY)||sessionStorage.getItem(STORAGE_KEY);
     if(raw){const d=JSON.parse(raw);if(d.isOwner) return true;}
@@ -1116,8 +1126,9 @@ function dismissPaywall(){
 function handleUpgrade(){
   const url='https://ko-fi.com/s/9e4ccc869d';
   try{
-    if(window.Telegram&&Telegram.WebApp&&Telegram.WebApp.openLink){
-      Telegram.WebApp.openLink(url);return;
+    if(window.Telegram&&Telegram.WebApp){
+      Telegram.WebApp.openLink(url,{try_instant_view:false});
+      return;
     }
   }catch(e){}
   window.open(url,'_blank');
