@@ -295,6 +295,10 @@
   }
   .bottom-btn:active { background: var(--bg2); }
 
+  .share-btn { display:flex; align-items:center; justify-content:center; gap:7px; margin:10px 16px 0; width:calc(100% - 32px); padding:13px; background:linear-gradient(135deg,#7B5EA7,#4da3ff); color:#fff; border:none; border-radius:var(--radius); font-family:'DM Mono',monospace; font-size:12px; font-weight:500; cursor:pointer; transition:opacity 0.15s; }
+  .share-btn:active { opacity:0.85; }
+  .share-btn svg { width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
   /* ── Upload zone (Photo tab) ── */
   .upload-zone {
     margin: 0 16px 16px;
@@ -483,6 +487,10 @@
     <button class="bottom-btn" onclick="nextVariant()">↻ Another variant</button>
     <button class="bottom-btn" onclick="copyAllPalette()">Copy all HEX</button>
   </div>
+  <button class="share-btn" onclick="sharePalette()">
+    <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+    Share palette
+  </button>
 </div>
 
 <!-- ═══ PHOTO PANEL ═══ -->
@@ -638,7 +646,89 @@ function applyHex(){
   btn.textContent='✓';btn.style.color='#1D9E75';btn.style.borderColor='#1D9E75';
   setTimeout(()=>{btn.textContent='Apply';btn.style.color='';btn.style.borderColor='';},1200);
 }
-function nextVariant(){ if(!canUseApp()){ showPaywall('timer'); return; } variant++;renderPalette();}
+function generatePaletteImage(colors){
+  const canvas=document.createElement('canvas');
+  const W=800, H=420;
+  canvas.width=W; canvas.height=H;
+  const c=canvas.getContext('2d');
+
+  // dark background
+  c.fillStyle='#111113';
+  c.fillRect(0,0,W,H);
+
+  // color blocks
+  const blockH=260;
+  const bw=W/colors.length;
+  colors.forEach((hex,i)=>{
+    // rounded first/last
+    c.fillStyle=hex;
+    c.beginPath();
+    if(i===0) roundRect(c, i*bw+12, 20, bw-6, blockH, 12, true, false);
+    else if(i===colors.length-1) roundRect(c, i*bw+6, 20, bw-18, blockH, 12, false, true);
+    else c.rect(i*bw+6, 20, bw-12, blockH);
+    c.fill();
+
+    // hex label
+    const br=lum(hex)>140?'rgba(0,0,0,0.55)':'rgba(255,255,255,0.7)';
+    c.fillStyle=br;
+    c.font='bold 13px monospace';
+    c.textAlign='center';
+    c.fillText(hex.toUpperCase(), i*bw+bw/2, 20+blockH-14);
+  });
+
+  // color names row
+  colors.forEach((hex,i)=>{
+    c.fillStyle='#888';
+    c.font='12px monospace';
+    c.textAlign='center';
+    c.fillText(colorName(hex), i*bw+bw/2, blockH+52);
+  });
+
+  // watermark
+  c.fillStyle='rgba(255,255,255,0.18)';
+  c.font='bold 15px monospace';
+  c.textAlign='center';
+  c.fillText('Made with ColorMate 🎨  t.me/colormateapp_bot', W/2, H-16);
+
+  return canvas.toDataURL('image/png');
+}
+
+function roundRect(ctx,x,y,w,h,r,tl,tr){
+  ctx.beginPath();
+  ctx.moveTo(x+(tl?r:0),y);
+  ctx.lineTo(x+w-(tr?r:0),y);
+  if(tr) ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h);
+  ctx.lineTo(x,y+h);
+  if(tl) ctx.arcTo(x,y,x+r,y,r);
+  ctx.closePath();
+}
+
+async function sharePalette(){
+  const palette=getPalette(baseHex,ctx,variant);
+  const colors=[baseHex,...palette.map(c=>c.hex)];
+  const dataUrl=generatePaletteImage(colors);
+
+  // try native share with image file
+  try {
+    const blob=await (await fetch(dataUrl)).blob();
+    const file=new File([blob],'colormate-palette.png',{type:'image/png'});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({
+        files:[file],
+        title:'My palette',
+        text:`${colors.map(h=>h.toUpperCase()).join(' ')} → Made with ColorMate 🎨`,
+      });
+      return;
+    }
+  } catch(e){}
+
+  // fallback: open image in new tab
+  const a=document.createElement('a');
+  a.href=dataUrl;
+  a.download='colormate-palette.png';
+  a.click();
+}
 function copyAllPalette(){
   const palette=getPalette(baseHex,ctx,variant);
   const all=[baseHex,...palette.map(c=>c.hex)].map(h=>h.toUpperCase()).join(', ');
@@ -914,20 +1004,25 @@ function todayKey(){ return new Date().toISOString().slice(0,10); }
 
 function loadUsage(){
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    // пробуем localStorage
+    let raw = localStorage.getItem(STORAGE_KEY);
+    // fallback на sessionStorage если localStorage пустой
+    if(!raw) raw = sessionStorage.getItem(STORAGE_KEY);
     if(!raw) return null;
     const d = JSON.parse(raw);
-    // не сбрасываем если isPro — про остаётся навсегда
     if(d.isPro) return d;
     if(d.date !== todayKey()) return null;
     return d;
   } catch(e){ return null; }
 }
 
-function saveUsage(u){ localStorage.setItem(STORAGE_KEY, JSON.stringify({...u, date:todayKey()})); }
+function saveUsage(u){
+  const data = JSON.stringify({...u, date:todayKey()});
+  try { localStorage.setItem(STORAGE_KEY, data); } catch(e){}
+  try { sessionStorage.setItem(STORAGE_KEY, data); } catch(e){}
+}
 
 function getUsage(){
-  // владелец всегда Pro
   if(isOwner()) return { date:todayKey(), secsUsed:0, photosUsed:0, isPro:true };
   const u = loadUsage();
   if(u) return u;
