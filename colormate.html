@@ -414,14 +414,14 @@
   <div class="paywall-card">
     <div class="paywall-icon">🎨</div>
     <div class="paywall-title">Get Full Access</div>
-    <div class="paywall-sub">You've reached your free daily limit. Unlock unlimited use for just $1.</div>
+    <div class="paywall-sub">Unlock unlimited use forever for just $1.</div>
     <div class="paywall-feats">
       <div class="paywall-feat"><div class="paywall-feat-icon">∞</div> Unlimited palette generation</div>
       <div class="paywall-feat"><div class="paywall-feat-icon">📷</div> Unlimited photo analysis</div>
       <div class="paywall-feat"><div class="paywall-feat-icon">🔬</div> Eyedropper — pick any color</div>
       <div class="paywall-feat"><div class="paywall-feat-icon">⚡</div> No daily time limits</div>
     </div>
-    <button class="paywall-btn" onclick="handleUpgrade()">Unlock for $1 / month</button>
+    <button class="paywall-btn" onclick="handleUpgrade()">Unlock forever — $1</button>
     <button class="paywall-dismiss" onclick="dismissPaywall()">Maybe later</button>
   </div>
 </div>
@@ -993,12 +993,10 @@ function dismissPaywall(){
 }
 
 function handleUpgrade(){
-  // Placeholder — replace with your Gumroad/Stars link
-  const url = 'https://gumroad.com/l/colormate'; // ← замени на свою ссылку
   if(window.Telegram && Telegram.WebApp){
-    Telegram.WebApp.openLink(url);
+    Telegram.WebApp.openLink('https://ko-fi.com/s/9e4ccc869d');
   } else {
-    window.open(url,'_blank');
+    window.open('https://ko-fi.com/s/9e4ccc869d','_blank');
   }
 }
 
