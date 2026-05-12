@@ -530,7 +530,22 @@ function setCtx(btn,c){
 function applyHex(){
   let v=document.getElementById('hexInput').value.trim();
   if(!v.startsWith('#'))v='#'+v;
-  if(/^#[0-9A-Fa-f]{6}$/.test(v)){baseHex=v;variant=0;buildSwatches();renderPalette();}
+  if(!/^#[0-9A-Fa-f]{6}$/.test(v)){
+    const inp=document.getElementById('hexInput');
+    inp.style.borderColor='#e24b4a';
+    setTimeout(()=>inp.style.borderColor='',1000);
+    return;
+  }
+  baseHex=v;variant=0;
+  const exists=swatches.some(s=>s.hex.toLowerCase()===v.toLowerCase());
+  if(!exists){
+    swatches[0]={hex:v,name:colorName(v)};
+  }
+  buildSwatches();
+  renderPalette();
+  const btn=document.querySelector('.apply-btn');
+  btn.textContent='✓';btn.style.color='#1D9E75';btn.style.borderColor='#1D9E75';
+  setTimeout(()=>{btn.textContent='Apply';btn.style.color='';btn.style.borderColor='';},1200);
 }
 function nextVariant(){variant++;renderPalette();}
 function copyAllPalette(){
