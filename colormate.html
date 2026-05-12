@@ -379,12 +379,56 @@
     cursor: pointer;
   }
   .change-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ── Freemium bar ── */
+  .free-bar { display:flex; align-items:center; gap:8px; margin:0 16px 14px; padding:10px 14px; background:var(--bg2); border-radius:var(--radius-sm); border:0.5px solid var(--border2); }
+  .free-bar-info { flex:1; }
+  .free-bar-title { font-size:11px; color:var(--text); font-weight:500; }
+  .free-bar-sub { font-size:10px; color:var(--muted); margin-top:1px; }
+  .free-bar-upgrade { padding:5px 12px; font-family:'DM Mono',monospace; font-size:10px; border-radius:99px; border:none; background:var(--accent); color:#fff; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+  .time-pips { display:flex; gap:3px; margin:0 16px 6px; }
+  .pip { height:3px; flex:1; border-radius:99px; background:var(--bg3); transition:background 0.3s; }
+  .pip.on { background:var(--accent); }
+  .pip.warn { background:#f0a500; }
+  .pip.over { background:#e24b4a; }
+
+  /* ── Paywall overlay ── */
+  .paywall { position:fixed; inset:0; background:rgba(10,10,12,0.93); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); z-index:200; display:none; align-items:center; justify-content:center; padding:24px; }
+  .paywall.show { display:flex; }
+  .paywall-card { background:var(--bg2); border:0.5px solid var(--border2); border-radius:20px; padding:28px 22px; text-align:center; max-width:310px; width:100%; }
+  .paywall-icon { font-size:38px; margin-bottom:14px; }
+  .paywall-title { font-family:'Syne',sans-serif; font-size:19px; font-weight:700; color:var(--text); margin-bottom:8px; }
+  .paywall-sub { font-size:12px; color:var(--muted); line-height:1.7; margin-bottom:18px; }
+  .paywall-feats { display:flex; flex-direction:column; gap:8px; margin-bottom:20px; text-align:left; }
+  .paywall-feat { display:flex; align-items:center; gap:10px; font-size:12px; color:var(--text); }
+  .paywall-feat-icon { width:22px; height:22px; border-radius:50%; background:rgba(77,163,255,0.12); color:var(--accent); font-size:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .paywall-btn { width:100%; padding:14px; background:var(--accent); color:#fff; border:none; border-radius:var(--radius); font-family:'DM Mono',monospace; font-size:13px; font-weight:500; cursor:pointer; margin-bottom:10px; transition:opacity 0.15s; }
+  .paywall-btn:active { opacity:0.85; }
+  .paywall-dismiss { width:100%; padding:9px; background:transparent; color:var(--muted); border:none; font-family:'DM Mono',monospace; font-size:11px; cursor:pointer; }
 </style>
 </head>
 <body>
 
+<!-- ═══ PAYWALL OVERLAY ═══ -->
+<div class="paywall" id="paywall">
+  <div class="paywall-card">
+    <div class="paywall-icon">🎨</div>
+    <div class="paywall-title">Get Full Access</div>
+    <div class="paywall-sub">You've reached your free daily limit. Unlock unlimited use for just $1.</div>
+    <div class="paywall-feats">
+      <div class="paywall-feat"><div class="paywall-feat-icon">∞</div> Unlimited palette generation</div>
+      <div class="paywall-feat"><div class="paywall-feat-icon">📷</div> Unlimited photo analysis</div>
+      <div class="paywall-feat"><div class="paywall-feat-icon">🔬</div> Eyedropper — pick any color</div>
+      <div class="paywall-feat"><div class="paywall-feat-icon">⚡</div> No daily time limits</div>
+    </div>
+    <button class="paywall-btn" onclick="handleUpgrade()">Unlock for $1 / month</button>
+    <button class="paywall-dismiss" onclick="dismissPaywall()">Maybe later</button>
+  </div>
+</div>
+
 <div class="header">
   <div class="logo">Color<span>Mate</span></div>
+  <div id="statusChip" style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;"></div>
   <button class="shuffle-btn" id="shuffleBtn" onclick="shuffleSwatches()">
     <svg viewBox="0 0 24 24"><path d="M16 3h5v5M4 20l17-17M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
     Shuffle
@@ -401,6 +445,15 @@
     Photo Extract
   </button>
 </div>
+
+<div id="freeBar" class="free-bar">
+  <div class="free-bar-info">
+    <div class="free-bar-title" id="freeBarTitle">Free plan · <span id="timeLeft">10:00</span> left today</div>
+    <div class="free-bar-sub" id="freeBarSub">1 photo analysis remaining</div>
+  </div>
+  <button class="free-bar-upgrade" onclick="showPaywall('bar')">Upgrade $1</button>
+</div>
+<div class="time-pips" id="timePips"></div>
 
 <!-- ═══ PALETTE PANEL ═══ -->
 <div class="panel active" id="panel-palette">
@@ -505,6 +558,7 @@ function generateSwatches(){
 }
 
 function shuffleSwatches(){
+  if(!canUseApp()){ showPaywall('timer'); return; }
   const btn=document.getElementById('shuffleBtn');
   btn.classList.add('spinning');
   setTimeout(()=>btn.classList.remove('spinning'),420);
@@ -584,7 +638,7 @@ function applyHex(){
   btn.textContent='✓';btn.style.color='#1D9E75';btn.style.borderColor='#1D9E75';
   setTimeout(()=>{btn.textContent='Apply';btn.style.color='';btn.style.borderColor='';},1200);
 }
-function nextVariant(){variant++;renderPalette();}
+function nextVariant(){ if(!canUseApp()){ showPaywall('timer'); return; } variant++;renderPalette();}
 function copyAllPalette(){
   const palette=getPalette(baseHex,ctx,variant);
   const all=[baseHex,...palette.map(c=>c.hex)].map(h=>h.toUpperCase()).join(', ');
@@ -730,6 +784,13 @@ function extractColors(img,count=5){
 
 function handleFile(e){
   const file=e.target.files[0];if(!file)return;
+  if(!canUsePhoto()){
+    showPaywall('photo');
+    return;
+  }
+  usage.photosUsed++;
+  saveUsage(usage);
+  updateBar();
   const url=URL.createObjectURL(file);
   const zone=document.getElementById('uploadZone');
   zone.classList.add('has-img');
@@ -828,6 +889,123 @@ function switchTab(name,btn){
   shuffleBtn.style.display=name==='palette'?'flex':'none';
 }
 
+/* ─── FREEMIUM SYSTEM ─── */
+const FREE_MINUTES = 10;
+const FREE_PHOTOS = 1;
+const STORAGE_KEY = 'cm_free_v1';
+
+function todayKey(){ return new Date().toISOString().slice(0,10); }
+
+function loadUsage(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return null;
+    const d = JSON.parse(raw);
+    if(d.date !== todayKey()) return null; // new day — reset
+    return d;
+  } catch(e){ return null; }
+}
+
+function saveUsage(u){ localStorage.setItem(STORAGE_KEY, JSON.stringify({...u, date:todayKey()})); }
+
+function getUsage(){
+  const u = loadUsage();
+  if(u) return u;
+  const fresh = { date:todayKey(), secsUsed:0, photosUsed:0, isPro:false };
+  saveUsage(fresh);
+  return fresh;
+}
+
+let usage = getUsage();
+let sessionStart = Date.now();
+let timerInterval = null;
+
+function secsLeft(){ return Math.max(0, FREE_MINUTES*60 - usage.secsUsed); }
+function photosLeft(){ return Math.max(0, FREE_PHOTOS - usage.photosUsed); }
+function isPro(){ return usage.isPro; }
+
+function formatTime(s){
+  const m = Math.floor(s/60), sec = s%60;
+  return `${m}:${String(sec).padStart(2,'0')}`;
+}
+
+function updateBar(){
+  if(isPro()){
+    document.getElementById('freeBar').style.display='none';
+    document.getElementById('timePips').style.display='none';
+    document.getElementById('statusChip').innerHTML='⭐ Pro';
+    document.getElementById('statusChip').style.color='var(--accent)';
+    return;
+  }
+  const sl = secsLeft();
+  const pl = photosLeft();
+  const totalPips = 10;
+  const usedPips = Math.round((usage.secsUsed / (FREE_MINUTES*60)) * totalPips);
+  const pipsHTML = Array.from({length:totalPips},(_,i)=>{
+    let cls='pip';
+    if(i < usedPips) cls += usedPips >= totalPips ? ' over' : usedPips >= 7 ? ' warn' : ' on';
+    return `<div class="${cls}"></div>`;
+  }).join('');
+  document.getElementById('timePips').innerHTML = pipsHTML;
+  document.getElementById('freeBarTitle').innerHTML = sl > 0
+    ? `Free plan · <span id="timeLeft">${formatTime(sl)}</span> left today`
+    : `⏱ Daily time limit reached`;
+  document.getElementById('freeBarSub').textContent = pl > 0
+    ? `${pl} photo analysis remaining today`
+    : `No photo analyses left today`;
+  document.getElementById('statusChip').textContent = `Free · ${formatTime(sl)}`;
+}
+
+function startTimer(){
+  if(timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(()=>{
+    if(isPro()) return;
+    usage.secsUsed = Math.min(FREE_MINUTES*60, usage.secsUsed + 1);
+    saveUsage(usage);
+    updateBar();
+    if(secsLeft() === 0){
+      clearInterval(timerInterval);
+      showPaywall('timer');
+    }
+  }, 1000);
+}
+
+function canUseApp(){
+  if(isPro()) return true;
+  return secsLeft() > 0;
+}
+
+function canUsePhoto(){
+  if(isPro()) return true;
+  return photosLeft() > 0 && secsLeft() > 0;
+}
+
+function showPaywall(reason){
+  const sub = document.querySelector('.paywall-sub');
+  if(reason === 'timer') sub.textContent = "You've used your 10 free minutes for today. Come back tomorrow or unlock full access for just $1.";
+  else if(reason === 'photo') sub.textContent = "You've used your 1 free photo analysis for today. Upgrade for unlimited photo extraction.";
+  else sub.textContent = "Unlock unlimited palettes, photo analysis, and eyedropper for just $1/month.";
+  document.getElementById('paywall').classList.add('show');
+}
+
+function dismissPaywall(){
+  document.getElementById('paywall').classList.remove('show');
+}
+
+function handleUpgrade(){
+  // Placeholder — replace with your Gumroad/Stars link
+  const url = 'https://gumroad.com/l/colormate'; // ← замени на свою ссылку
+  if(window.Telegram && Telegram.WebApp){
+    Telegram.WebApp.openLink(url);
+  } else {
+    window.open(url,'_blank');
+  }
+}
+
+// DEV helper — call unlockPro() in console to test pro mode
+function unlockPro(){ usage.isPro=true; saveUsage(usage); updateBar(); dismissPaywall(); alert('Pro unlocked!'); }
+function resetFree(){ localStorage.removeItem(STORAGE_KEY); location.reload(); }
+
 document.getElementById('hexInput').addEventListener('keydown',e=>{if(e.key==='Enter')applyHex();});
 
 /* ─── TELEGRAM SDK ─── */
@@ -836,6 +1014,9 @@ if(window.Telegram&&Telegram.WebApp){
   Telegram.WebApp.expand();
 }
 
+usage = getUsage();
+updateBar();
+if(!isPro()) startTimer();
 buildSwatches();
 renderPalette();
 </script>
